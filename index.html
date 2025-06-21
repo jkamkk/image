@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 悬浮流光卡片</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            height: 100vh;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #1a1a1a; /* Add a fallback background */
+        }
+
+        /* Background container for blurred image */
+        .background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: var(--bg-image);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            filter: blur(25px) brightness(0.5);
+            transform: scale(1.1); /* Prevent blurred edges */
+            z-index: -1;
+        }
+
+        /* Main container for centering and 3D perspective */
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 20px;
+            perspective: 1500px; /* Crucial for 3D effect */
+        }
+
+        /* Image container for 3D transforms and shadow */
+        .image-container {
+            position: relative;
+            max-width: 90%;
+            max-height: 90%;
+            transform-style: preserve-3d;
+            /* Looping 3D animation */
+            animation: card3dFloat 12s ease-in-out infinite;
+            filter: drop-shadow(0 40px 30px rgba(0,0,0,0.5)); /* Realistic shadow */
+            transition: filter 0.4s ease, transform 0.1s linear;
+        }
+        
+        /* Shimmer effect container */
+        .shimmer-wrapper {
+            position: relative;
+            display: inline-block;
+            overflow: hidden;
+            border-radius: 22px; /* iOS-like rounded corners */
+            transform: translateZ(20px); /* Lift the image slightly in 3D space */
+        }
+
+        /* Shimmer/gleam effect with a long tail */
+        .shimmer-wrapper::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -50%; /* Start further left */
+            width: 200%; /* Make gradient wider */
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            border-radius: 22px;
+            background: linear-gradient(
+                110deg,
+                transparent 40%,
+                rgba(255, 255, 255, 0.1) 48%,
+                rgba(255, 255, 255, 0.25) 50%,
+                rgba(255, 255, 255, 0.1) 52%,
+                transparent 60%
+            );
+            transform: translateX(-100%);
+            animation: shimmer 4s ease-in-out infinite 0.5s;
+        }
+
+        /* Main image style */
+        .main-image {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 22px;
+            /* Add a subtle border to catch light */
+            box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.15) inset;
+            position: relative;
+            z-index: 0;
+            object-fit: contain;
+            /* To handle very long images (like screenshots) */
+            max-height: 75vh;
+        }
+
+        /* Keyframe for the 3D floating animation */
+        @keyframes card3dFloat {
+            0%, 100% {
+                transform: rotateX(0deg) rotateY(0deg) translateZ(0px);
+            }
+            25% {
+                transform: rotateX(8deg) rotateY(-10deg) translateZ(15px);
+            }
+            50% {
+                transform: rotateX(-6deg) rotateY(0deg) translateZ(0px);
+            }
+            75% {
+                transform: rotateX(4deg) rotateY(10deg) translateZ(10px);
+            }
+        }
+        
+        /* Keyframe for the shimmer animation */
+        @keyframes shimmer {
+            from {
+                transform: translateX(-100%);
+            }
+            to {
+                transform: translateX(100%);
+            }
+        }
+        
+        /* Loading indicator styles */
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 18px;
+            text-align: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive design for smaller screens */
+        @media (max-width: 768px) {
+            .container {
+                perspective: 1000px;
+            }
+            .main-image, .shimmer-wrapper {
+                border-radius: 16px;
+            }
+            .shimmer-wrapper::before {
+                border-radius: 16px;
+            }
+            .main-image {
+                max-height: 70vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Background Layer -->
+    <div class="background"></div>
+
+    <!-- Main Content -->
+    <div class="container" id="container">
+        <div class="image-container" id="imageContainer">
+            <!-- Loading Indicator -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>加载中...</div>
+            </div>
+            
+            <!-- Shimmer Effect Wrapper -->
+            <div class="shimmer-wrapper" id="shimmerWrapper" style="visibility: hidden;">
+                <!-- Main Image -->
+                <img class="main-image" id="mainImage" alt="Display Image">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Get elements from the DOM ---
+            const mainImage = document.getElementById('mainImage');
+            const shimmerWrapper = document.getElementById('shimmerWrapper');
+            const loading = document.getElementById('loading');
+            const container = document.getElementById('container');
+            const imageContainer = document.getElementById('imageContainer');
+            
+            // --- Get parameters from the URL ---
+            const params = new URLSearchParams(window.location.search);
+            const imageBase64 = params.get('image_base64');
+            const redirectUrl = params.get('url');
+
+            // --- Define a default image in case the parameter is missing ---
+            const defaultImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%23444'/%3E%3Cstop offset='100%25' stop-color='%23222'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='400' height='300' rx='22' fill='url(%23g)'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='-apple-system, sans-serif' font-size='18px' fill='%23fff'%3E%3Ctspan x='50%25' dy='-1em'%3ENo image_base64 provided.%3C/tspan%3E%3Ctspan x='50%25' dy='1.5em'%3EPlease add it to the URL.%3C/tspan%3E%3C/text%3E%3C/svg%3E";
+            
+            const finalImageSrc = imageBase64 || defaultImage;
+
+            // --- Set image sources ---
+            // Set the blurred background
+            document.documentElement.style.setProperty('--bg-image', `url(${finalImageSrc})`);
+            // Set the main image
+            mainImage.src = finalImageSrc;
+
+            // --- Handle image loading ---
+            mainImage.onload = function() {
+                loading.style.display = 'none';
+                shimmerWrapper.style.visibility = 'visible';
+                shimmerWrapper.style.opacity = 0;
+                // Fade in animation
+                let opacity = 0;
+                const interval = setInterval(() => {
+                    opacity += 0.05;
+                    shimmerWrapper.style.opacity = opacity;
+                    if (opacity >= 1) clearInterval(interval);
+                }, 10);
+            };
+
+            mainImage.onerror = function() {
+                loading.innerHTML = '<div style="color: rgba(255,255,255,0.8); text-align:center;">图片加载失败<br>请检查 Base64 数据</div>';
+                // Use default image on error as well
+                document.documentElement.style.setProperty('--bg-image', `url(${defaultImage})`);
+            };
+            
+            // --- Handle background click to open URL ---
+            if (redirectUrl) {
+                container.style.cursor = 'pointer'; // Show it's clickable
+                container.addEventListener('click', (event) => {
+                    // Only trigger if the click is on the container itself, not the image
+                    if (event.target === container) {
+                        window.open(redirectUrl, '_blank');
+                    }
+                });
+            }
+
+            // --- (Optional) Interactive 3D tilt on mouse move ---
+            container.addEventListener('mousemove', (e) => {
+                const rect = container.getBoundingClientRect();
+                // Calculate position of mouse relative to the center of the container
+                const x = e.clientX - rect.left - rect.width / 2;
+                const y = e.clientY - rect.top - rect.height / 2;
+
+                // Define sensitivity. Lower number = more sensitive
+                const rotateX = -y / 40; 
+                const rotateY = x / 40;
+
+                // Pause animation and apply interactive transform
+                imageContainer.style.animation = 'none';
+                imageContainer.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+            });
+
+            // Resume animation when mouse leaves
+            container.addEventListener('mouseleave', () => {
+                imageContainer.style.animation = 'card3dFloat 12s ease-in-out infinite';
+                // Smoothly return to neutral position
+                imageContainer.style.transform = `rotateX(0deg) rotateY(0deg)`; 
+            });
+        });
+    </script>
+</body>
+</html>
